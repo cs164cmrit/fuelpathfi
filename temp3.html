@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Fuel Pathfinding</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #f5f5f5;
+        margin: 0;
+        padding: 0;
+      }
+      #controls {
+        margin: 20px;
+        display: grid;
+        grid-template-columns: repeat(2, auto);
+        gap: 10px;
+      }
+      #controls label {
+        text-align: right;
+        padding: 5px;
+      }
+      #controls input {
+        padding: 5px;
+        width: 80px;
+      }
+      #canvas {
+        border: 1px solid #333;
+        background: white;
+      }
+      #output {
+        margin-top: 15px;
+        font-size: 16px;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Fuel-Constrained Pathfinding</h2>
+    <div id="controls">
+      <label>Number of Cities:</label
+      ><input type="number" id="numCities" value="6" min="3" />
+      <label>Fuel Capacity:</label
+      ><input type="number" id="fuelCapacity" value="10" min="1" />
+      <label>Fuel Stations:</label
+      ><input type="number" id="numStations" value="2" min="1" />
+      <label>Max Edges per Node:</label
+      ><input type="number" id="maxEdges" value="3" min="2" />
+      <label>Max Edge Distance:</label
+      ><input type="number" id="maxEdgeDistance" value="10" min="2" />
+      <button onclick="generateCities()">Generate</button>
+      <button onclick="findPath()">Find Path</button>
+    </div>
+
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="output"></div>
+
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+
+      let numCities = 0;
+      let graph = {};
+      let cityPositions = {};
+      let edges = [];
+      let currentPath = [];
+      let fuelStations = new Set();
+
+      class MinHeap {
+        constructor(compare) {
+          this.data = [];
+          this.compare = compare;
+        }
+        insert(value) {
+          this.data.push(value);
+          this.bubbleUp();
+        }
+        bubbleUp() {
+          let idx = this.data.length - 1;
+          while (idx > 0) {
+            let parentIdx = Math.floor((idx - 1) / 2);
+            if (this.compare(this.data[idx], this.data[parentIdx]) >= 0) break;
+            [this.data[idx], this.data[parentIdx]] = [
+              this.data[parentIdx],
+              this.data[idx],
+            ];
+            idx = parentIdx;
+          }
+        }
+        extract() {
+          if (this.data.length === 1) return this.data.pop();
+          const top = this.data[0];
+          this.data[0] = this.data.pop();
+          this.sinkDown(0);
+          return top;
+        }
+        sinkDown(idx) {
+          const length = this.data.length;
+          while (true) {
+            let left = 2 * idx + 1,
+              right = 2 * idx + 2;
+            let smallest = idx;
+            if (
+              left < length &&
+              this.compare(this.data[left], this.data[smallest]) < 0
+            )
+              smallest = left;
+            if (
+              right < length &&
+              this.compare(this.data[right], this.data[smallest]) < 0
+            )
+              smallest = right;
+            if (smallest === idx) break;
+            [this.data[idx], this.data[smallest]] = [
+              this.data[smallest],
+              this.data[idx],
+            ];
+            idx = smallest;
+          }
+        }
+        isEmpty() {
+          return this.data.length === 0;
+        }
+      }
+
+      function generateCities() {
+        const n = parseInt(document.getElementById("numCities").value);
+        numCities = n;
+        const maxEdges = parseInt(document.getElementById("maxEdges").value);
+        const maxDist = parseInt(
+          document.getElementById("maxEdgeDistance").value
+        );
+        const stationCount = parseInt(
+          document.getElementById("numStations").value
+        );
+
+        // Reset
+        graph = {};
+        edges = [];
+        currentPath = [];
+        fuelStations = new Set([1]); // city 1 always has fuel
+
+        for (let i = 1; i <= n; i++) graph[i] = [];
+
+        // Circle layout
+        cityPositions = {};
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 80;
+        for (let i = 1; i <= n; i++) {
+          const angle = (2 * Math.PI * (i - 1)) / n - Math.PI / 2;
+          cityPositions[i] = {
+            x: centerX + radius * Math.cos(angle),
+            y: centerY + radius * Math.sin(angle),
+          };
+        }
+
+        // Random edges
+        autoGenerateEdges(n, maxEdges, maxDist);
+
+        // Pick fuel stations
+        while (fuelStations.size < stationCount && fuelStations.size < n) {
+          const rnd = Math.floor(Math.random() * (n - 2)) + 2; // avoid 1 and N
+          fuelStations.add(rnd);
+        }
+
+        drawGraph();
+      }
+
+      function autoGenerateEdges(n, maxEdges, maxDist) {
+        edges = [];
+        for (let i = 1; i <= n; i++) graph[i] = [];
+
+        for (let i = 1; i <= n; i++) {
+          let neighbors = new Set();
+          while (neighbors.size < 2) {
+            // ensure at least 2 edges
+            const j = Math.floor(Math.random() * n) + 1;
+            if (j !== i && !(i === 1 && j === n) && !(j === 1 && i === n)) {
+              neighbors.add(j);
+            }
+          }
+          while (neighbors.size < maxEdges) {
+            if (Math.random() < 0.4) {
+              const j = Math.floor(Math.random() * n) + 1;
+              if (j !== i && !(i === 1 && j === n) && !(j === 1 && i === n)) {
+                neighbors.add(j);
+              }
+            }
+            if (neighbors.size >= maxEdges) break;
+          }
+
+          neighbors.forEach((j) => {
+            const distance = Math.floor(Math.random() * (maxDist - 1)) + 2;
+            if (!graph[i].some((e) => e.to === j)) {
+              graph[i].push({ to: j, distance });
+              graph[j].push({ to: i, distance });
+              edges.push({ from: i, to: j, distance });
+            }
+          });
+        }
+      }
+
+      function drawGraph() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw edges
+        edges.forEach((edge) => {
+          const fromPos = cityPositions[edge.from];
+          const toPos = cityPositions[edge.to];
+          ctx.beginPath();
+          ctx.moveTo(fromPos.x, fromPos.y);
+          ctx.lineTo(toPos.x, toPos.y);
+          ctx.strokeStyle = "#666";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          const midX = (fromPos.x + toPos.x) / 2;
+          const midY = (fromPos.y + toPos.y) / 2;
+          ctx.fillStyle = "white";
+          ctx.fillRect(midX - 15, midY - 10, 30, 20);
+          ctx.fillStyle = "#333";
+          ctx.font = "12px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(edge.distance, midX, midY + 4);
+        });
+
+        // Draw path
+        if (currentPath.length > 1) {
+          for (let i = 0; i < currentPath.length - 1; i++) {
+            const fromPos = cityPositions[currentPath[i]];
+            const toPos = cityPositions[currentPath[i + 1]];
+            ctx.beginPath();
+            ctx.moveTo(fromPos.x, fromPos.y);
+            ctx.lineTo(toPos.x, toPos.y);
+            ctx.strokeStyle = "#9C27B0";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+          }
+        }
+
+        // Draw cities
+        for (let i = 1; i <= numCities; i++) {
+          const pos = cityPositions[i];
+          let color = "#999";
+          if (i === 1) color = "green";
+          else if (i === numCities) color = "red";
+          else if (fuelStations.has(i)) color = "blue";
+
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, 25, 0, 2 * Math.PI);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 16px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(i, pos.x, pos.y + 5);
+        }
+      }
+
+      async function refuelAnimation(city) {
+        const pos = cityPositions[city];
+        for (let k = 0; k < 3; k++) {
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, 30, 0, 2 * Math.PI);
+          ctx.fillStyle = "yellow";
+          ctx.fill();
+          await new Promise((r) => setTimeout(r, 150));
+          drawGraph();
+        }
+      }
+
+      async function dijkstraWithFuel(N, F, adj, fuelStations) {
+        const pq = new MinHeap((a, b) => a.distance - b.distance);
+        const visited = new Set();
+        pq.insert({ distance: 0, city: 1, fuel: F, path: [1], fuelState: [F] });
+
+        while (!pq.isEmpty()) {
+          const current = pq.extract();
+          const key = `${current.city},${current.fuel}`;
+          if (visited.has(key)) continue;
+          visited.add(key);
+
+          if (current.city === N) {
+            return {
+              distance: current.distance,
+              path: current.path,
+              fuelState: current.fuelState,
+            };
+          }
+
+          for (const edge of adj[current.city]) {
+            if (edge.distance <= current.fuel) {
+              let newFuel = current.fuel - edge.distance;
+              if (fuelStations.has(edge.to)) {
+                await refuelAnimation(edge.to);
+                newFuel = F;
+              }
+              pq.insert({
+                distance: current.distance + edge.distance,
+                city: edge.to,
+                fuel: newFuel,
+                path: [...current.path, edge.to],
+                fuelState: [...current.fuelState, newFuel],
+              });
+            }
+          }
+        }
+        return { distance: -1, path: [] };
+      }
+
+      async function findPath() {
+        const F = parseInt(document.getElementById("fuelCapacity").value);
+        const { distance, path, fuelState } = await dijkstraWithFuel(
+          numCities,
+          F,
+          graph,
+          fuelStations
+        );
+
+        if (distance === -1) {
+          document.getElementById("output").innerText = "No valid path found!";
+          currentPath = [];
+        } else {
+          document.getElementById(
+            "output"
+          ).innerText = `Shortest Distance: ${distance}, Path: ${path.join(
+            " -> "
+          )}, Fuel States: ${fuelState.join(" | ")}`;
+          currentPath = path;
+        }
+        drawGraph();
+      }
+    </script>
+  </body>
+</html>

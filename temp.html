@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dijkstra with Fuel Stations</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        color: white;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 2.5em;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-bottom: 30px;
+      }
+
+      .control-panel {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .control-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        font-size: 1.1em;
+      }
+
+      input,
+      button {
+        width: 100%;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        box-sizing: border-box;
+      }
+
+      input {
+        background: rgba(255, 255, 255, 0.9);
+        color: #333;
+      }
+
+      button {
+        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .visualization {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 20px;
+        margin-top: 20px;
+        color: #333;
+      }
+
+      #canvas {
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        background: white;
+        display: block;
+        margin: 0 auto;
+      }
+
+      .results {
+        margin-top: 20px;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        border-left: 5px solid #4ecdc4;
+      }
+
+      .city-controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .city-btn {
+        padding: 8px;
+        font-size: 14px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .city-btn.fuel-station {
+        background: linear-gradient(45deg, #2196f3, #21cbf3);
+        color: white;
+      }
+
+      .city-btn.normal {
+        background: #e0e0e0;
+        color: #333;
+      }
+
+      .legend {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid #333;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🚗⛽ Dijkstra with Fuel Stations Algorithm</h1>
+
+      <div class="controls">
+        <div class="control-panel">
+          <h3>Graph Setup</h3>
+
+          <div class="control-group">
+            <label for="numCities">Number of Cities:</label>
+            <input type="number" id="numCities" min="2" max="15" value="5" />
+            <button onclick="generateCities()">Generate Cities</button>
+          </div>
+
+          <div class="control-group">
+            <label for="fuelCapacity">Fuel Capacity:</label>
+            <input
+              type="number"
+              id="fuelCapacity"
+              min="1"
+              max="100"
+              value="10"
+            />
+          </div>
+
+          <div class="control-group">
+            <label>Fuel Stations (Click to toggle):</label>
+            <div id="cityControls" class="city-controls"></div>
+          </div>
+
+          <button
+            onclick="runAlgorithm()"
+            style="background: linear-gradient(45deg, #4ecdc4, #44a08d)"
+          >
+            🚀 Find Shortest Path
+          </button>
+        </div>
+      </div>
+
+      <div class="visualization">
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-color" style="background: green"></div>
+            <span>Start</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: red"></div>
+            <span>Destination</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: blue"></div>
+            <span>Fuel Station</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: gray"></div>
+            <span>Regular City</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background: purple"></div>
+            <span>Chosen Path</span>
+          </div>
+        </div>
+
+        <canvas id="canvas" width="900" height="500"></canvas>
+
+        <div id="results" class="results" style="display: none">
+          <h3>Algorithm Results:</h3>
+          <div id="resultText"></div>
+          <div id="fuelLine"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let graph = {};
+      let fuelStations = new Set([1]);
+      let numCities = 5;
+      let canvas, ctx;
+      let cityPositions = {};
+      let edges = [];
+      let currentPath = [];
+      let isRunning = false;
+
+      window.onload = function () {
+        canvas = document.getElementById("canvas");
+        ctx = canvas.getContext("2d");
+        generateCities();
+      };
+
+      function generateCities() {
+        const n = parseInt(document.getElementById("numCities").value);
+        numCities = n;
+        graph = {};
+        edges = [];
+        currentPath = [];
+        fuelStations = new Set([1]);
+
+        for (let i = 1; i <= n; i++) graph[i] = [];
+
+        // Circle layout
+        cityPositions = {};
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 80;
+        for (let i = 1; i <= n; i++) {
+          const angle = (2 * Math.PI * (i - 1)) / n - Math.PI / 2;
+          cityPositions[i] = {
+            x: centerX + radius * Math.cos(angle),
+            y: centerY + radius * Math.sin(angle),
+          };
+        }
+
+        generateCityControls();
+        autoGenerateEdges();
+        drawGraph();
+      }
+
+      function generateCityControls() {
+        const container = document.getElementById("cityControls");
+        container.innerHTML = "";
+        for (let i = 1; i <= numCities; i++) {
+          const btn = document.createElement("button");
+          btn.textContent = `City ${i}`;
+          btn.className =
+            "city-btn " + (fuelStations.has(i) ? "fuel-station" : "normal");
+          btn.onclick = () => toggleFuelStation(i);
+          container.appendChild(btn);
+        }
+      }
+
+      function toggleFuelStation(city) {
+        if (city === 1) return;
+        if (fuelStations.has(city)) fuelStations.delete(city);
+        else fuelStations.add(city);
+        generateCityControls();
+        drawGraph();
+      }
+
+      function autoGenerateEdges() {
+        edges = [];
+        for (let i = 1; i <= numCities; i++) graph[i] = [];
+
+        for (let i = 1; i <= numCities; i++) {
+          for (let j = i + 1; j <= numCities; j++) {
+            if (i === 1 && j === numCities) continue; // block start→end
+            if (Math.random() < 0.4) {
+              const distance = Math.floor(Math.random() * 9) + 2;
+              graph[i].push({ to: j, distance });
+              graph[j].push({ to: i, distance });
+              edges.push({ from: i, to: j, distance });
+            }
+          }
+        }
+      }
+
+      function drawGraph() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Edges
+        edges.forEach((edge) => {
+          const fromPos = cityPositions[edge.from];
+          const toPos = cityPositions[edge.to];
+          ctx.beginPath();
+          ctx.moveTo(fromPos.x, fromPos.y);
+          ctx.lineTo(toPos.x, toPos.y);
+          ctx.strokeStyle = "#666";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          const midX = (fromPos.x + toPos.x) / 2;
+          const midY = (fromPos.y + toPos.y) / 2;
+          ctx.fillStyle = "white";
+          ctx.fillRect(midX - 15, midY - 10, 30, 20);
+          ctx.fillStyle = "#333";
+          ctx.font = "12px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(edge.distance, midX, midY + 4);
+        });
+
+        // Path
+        if (currentPath.length > 1) {
+          for (let i = 0; i < currentPath.length - 1; i++) {
+            const fromPos = cityPositions[currentPath[i]];
+            const toPos = cityPositions[currentPath[i + 1]];
+            ctx.beginPath();
+            ctx.moveTo(fromPos.x, fromPos.y);
+            ctx.lineTo(toPos.x, toPos.y);
+            ctx.strokeStyle = "purple";
+            ctx.lineWidth = 4;
+            ctx.stroke();
+          }
+        }
+
+        // Cities
+        for (let i = 1; i <= numCities; i++) {
+          const pos = cityPositions[i];
+          let color = "gray";
+          if (i === 1) color = "green";
+          else if (i === numCities) color = "red";
+          else if (fuelStations.has(i)) color = "blue";
+
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, 25, 0, 2 * Math.PI);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = "#333";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.fillStyle = "white";
+          ctx.font = "bold 16px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(i, pos.x, pos.y + 5);
+        }
+      }
+
+      async function refuelAnimation(city) {
+        const pos = cityPositions[city];
+        for (let k = 0; k < 3; k++) {
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, 30, 0, 2 * Math.PI);
+          ctx.fillStyle = "yellow";
+          ctx.fill();
+          await new Promise((r) => setTimeout(r, 150));
+          drawGraph();
+        }
+      }
+
+      async function runAlgorithm() {
+        if (isRunning) return;
+        isRunning = true;
+        currentPath = [];
+
+        const fuelCapacity = parseInt(
+          document.getElementById("fuelCapacity").value
+        );
+        const result = await dijkstraWithFuel(
+          numCities,
+          fuelCapacity,
+          graph,
+          fuelStations
+        );
+
+        document.getElementById("results").style.display = "block";
+        if (result.distance === -1) {
+          document.getElementById("resultText").innerHTML =
+            '<strong style="color:red">No path found!</strong>';
+          document.getElementById("fuelLine").innerHTML = "";
+        } else {
+          document.getElementById(
+            "resultText"
+          ).innerHTML = `<strong style="color:green">Shortest distance: ${
+            result.distance
+          }</strong><br>Path: ${result.path.join(" → ")}`;
+          document.getElementById(
+            "fuelLine"
+          ).innerHTML = `<br><strong>Fuel states:</strong> ${result.fuelState.join(
+            " → "
+          )}`;
+          currentPath = result.path;
+          drawGraph();
+        }
+
+        isRunning = false;
+      }
+
+      async function dijkstraWithFuel(N, F, adj, fuelStations) {
+        const pq = new MinHeap((a, b) => a.distance - b.distance);
+        const visited = new Set();
+        pq.insert({ distance: 0, city: 1, fuel: F, path: [1], fuelState: [F] });
+
+        while (!pq.isEmpty()) {
+          const current = pq.extract();
+          const key = `${current.city},${current.fuel}`;
+          if (visited.has(key)) continue;
+          visited.add(key);
+
+          if (current.city === N) {
+            return {
+              distance: current.distance,
+              path: current.path,
+              fuelState: current.fuelState,
+            };
+          }
+
+          for (const edge of adj[current.city]) {
+            if (edge.distance <= current.fuel) {
+              let newFuel = current.fuel - edge.distance;
+              if (fuelStations.has(edge.to)) {
+                await refuelAnimation(edge.to);
+                newFuel = F;
+              }
+              pq.insert({
+                distance: current.distance + edge.distance,
+                city: edge.to,
+                fuel: newFuel,
+                path: [...current.path, edge.to],
+                fuelState: [...current.fuelState, newFuel],
+              });
+            }
+          }
+        }
+        return { distance: -1, path: [] };
+      }
+
+      class MinHeap {
+        constructor(compareFn) {
+          this.heap = [];
+          this.compare = compareFn;
+        }
+        insert(el) {
+          this.heap.push(el);
+          this.heapifyUp(this.heap.length - 1);
+        }
+        extract() {
+          if (this.heap.length === 0) return null;
+          if (this.heap.length === 1) return this.heap.pop();
+          const min = this.heap[0];
+          this.heap[0] = this.heap.pop();
+          this.heapifyDown(0);
+          return min;
+        }
+        heapifyUp(i) {
+          if (i === 0) return;
+          const p = Math.floor((i - 1) / 2);
+          if (this.compare(this.heap[i], this.heap[p]) < 0) {
+            [this.heap[i], this.heap[p]] = [this.heap[p], this.heap[i]];
+            this.heapifyUp(p);
+          }
+        }
+        heapifyDown(i) {
+          const l = 2 * i + 1,
+            r = 2 * i + 2;
+          let s = i;
+          if (
+            l < this.heap.length &&
+            this.compare(this.heap[l], this.heap[s]) < 0
+          )
+            s = l;
+          if (
+            r < this.heap.length &&
+            this.compare(this.heap[r], this.heap[s]) < 0
+          )
+            s = r;
+          if (s !== i) {
+            [this.heap[i], this.heap[s]] = [this.heap[s], this.heap[i]];
+            this.heapifyDown(s);
+          }
+        }
+        isEmpty() {
+          return this.heap.length === 0;
+        }
+      }
+    </script>
+  </body>
+</html>
